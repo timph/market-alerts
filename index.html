@@ -1,0 +1,211 @@
+# Resilient SOXX Market Watchdog
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resilient Agent | SOXX Live</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #020617;
+            color: #f8fafc;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .dashboard-card {
+
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+
+        .proxy-badge {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-12">
+
+    <div class="max-w-5xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <div>
+                <h1 class="text-3xl font-black tracking-tight mb-1">SOXX WATCHDOG</h1>
+                <div id="activeProxy" class="proxy-badge flex items-center gap-2 px-3 py-1 bg-slate-800 border border-slate-700 rounded-full w-fit">
+                    <span class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Status: Initializing...</span>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button id="enableNotifs" class="text-[10px] font-bold bg-white text-black px-4 py-2 rounded-xl hover:bg-slate-200 transition-all">
+                    ENABLE DESKTOP ALERTS
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Main ETF Gauge -->
+                <div class="dashboard-card p-10 rounded-[40px] relative overflow-hidden">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Semiconductor ETF (SOXX)</p>
+                    <div class="flex items-baseline gap-4">
+                        <h2 id="priceDisplay" class="text-7xl font-black mono tracking-tighter">$562.14</h2>
+                        <span id="changeDisplay" class="text-3xl font-bold text-red-400">-3.98%</span>
+                    </div>
+
+                </div>
+
+                <!-- Component Analysis -->
+                <div class="dashboard-card rounded-[40px] overflow-hidden">
+                    <div class="p-6 bg-white/5 border-b border-white/5">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Component Culprit Analysis</h3>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/5" id="holdingGrid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Logs -->
+            <div class="dashboard-card p-8 rounded-[40px] flex flex-col">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Agent Diagnostics</h3>
+                <div id="logContent" class="flex-1 h-80 overflow-y-auto space-y-2 text-[9px] mono opacity-60 leading-tight">
+                    <!-- Logs -->
+                </div>
+
+                <button id="refreshBtn" class="w-full mt-6 py-4 bg-blue-600 rounded-2xl font-black text-xs hover:bg-blue-500 shadow-xl shadow-blue-900/20">
+                    FORCE RE-FETCH
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div id="systemicAlert" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center hidden p-6">
+        <div class="dashboard-card max-w-sm w-full p-10 rounded-[40px] text-center border border-red-500/50">
+            <div class="text-5xl mb-4">🚨</div>
+            <h2 class="text-2xl font-black mb-4">SYSTEMIC SELL-OFF</h2>
+            <p class="text-slate-400 text-xs mb-8">The entire chip industry is selling off. This is a systemic signal detected by your agent.</p>
+            <button onclick="document.getElementById('systemicAlert').classList.add('hidden')" class="w-full py-3 bg-red-600 rounded-2xl font-bold">ACKNOWLEDGE</button>
+        </div>
+    </div>
+
+    <script>
+        const TICKER = 'SOXX';
+
+        const HOLDINGS = ['MU', 'AMD', 'AVGO', 'NVDA'];
+        const PROXIES = [
+            'https://api.allorigins.win',
+            'https://corsproxy.io/?',
+            'https://proxy.corsfix.com/?'
+        ];
+
+        // Today's Open Prices (June 9, 2026)
+        const OPEN_PRICES = { 'SOXX': 585.45, 'MU': 935.00, 'AMD': 503.45, 'AVGO': 401.61, 'NVDA': 210.62 };
+
+        let currentProxyIndex = 0;
+
+        async function fetchWithFallback() {
+            const baseUrl = `https://query1.finance.yahoo.com{TICKER},${HOLDINGS.join(',')}`;
+            
+            // Try each proxy in the list until one succeeds
+            for (let i = 0; i < PROXIES.length; i++) {
+                const proxy = PROXIES[currentProxyIndex];
+                const fullUrl = proxy + encodeURIComponent(baseUrl);
+
+                
+                updateProxyUI(`Trying: ${new URL(proxy).hostname}...`, 'amber');
+                addLog(`Attempting fetch via ${new URL(proxy).hostname}`);
+
+                try {
+                    const response = await fetch(fullUrl);
+                    if (!response.ok) throw new Error('Proxy returned error');
+                    
+                    const data = await response.json();
+                    
+                    // Success!
+                    updateProxyUI(`Connected: ${new URL(proxy).hostname}`, 'emerald');
+                    addLog(`Success! Data retrieved via ${new URL(proxy).hostname}`, 'text-emerald-400');
+                    processData(data.quoteResponse.result);
+                    return; // Exit function on success
+                } catch (err) {
+                    addLog(`NetworkError via ${new URL(proxy).hostname}. Rotating...`, 'text-red-400');
+                    currentProxyIndex = (currentProxyIndex + 1) % PROXIES.length;
+                }
+
+            }
+            
+            addLog("CRITICAL: All proxies failed. Check your internet or browser security.", "text-red-500 font-bold");
+            updateProxyUI("All Proxies Failed", "red");
+        }
+
+        function processData(quotes) {
+            const etf = quotes.find(q => q.symbol === TICKER);
+            const etfChange = ((etf.regularMarketPrice - OPEN_PRICES[TICKER]) / OPEN_PRICES[TICKER]) * 100;
+
+            document.getElementById('priceDisplay').innerText = `$${etf.regularMarketPrice.toFixed(2)}`;
+            document.getElementById('changeDisplay').innerText = `${etfChange.toFixed(2)}%`;
+            
+            if (etfChange < -3.0) {
+                document.getElementById('systemicAlert').classList.remove('hidden');
+                notifyUser(`🚨 Systemic Signal: Industry down ${etfChange.toFixed(2)}%`);
+            }
+
+            const grid = document.getElementById('holdingGrid');
+
+            grid.innerHTML = '';
+            
+            quotes.filter(q => q.symbol !== TICKER).forEach(q => {
+                const open = OPEN_PRICES[q.symbol];
+                const change = ((q.regularMarketPrice - open) / open) * 100;
+                const card = document.createElement('div');
+                card.className = `p-8 flex justify-between items-center ${change < -2.0 ? 'bg-red-500/5' : ''}`;
+                card.innerHTML = `
+                    <div><p class="font-black text-lg">${q.symbol}</p><p class="text-[10px] text-slate-500">$${q.regularMarketPrice.toFixed(2)}</p></div>
+                    <p class="text-xl font-bold ${change < 0 ? 'text-red-400' : 'text-emerald-400'}">${change.toFixed(2)}%</p>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function updateProxyUI(text, color) {
+            const badge = document.getElementById('activeProxy');
+            const dot = badge.querySelector('span:first-child');
+            const label = badge.querySelector('span:last-child');
+
+            label.innerText = `Status: ${text}`;
+            dot.className = `w-1.5 h-1.5 rounded-full ${color === 'emerald' ? 'bg-emerald-500' : color === 'red' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'}`;
+            badge.className = `proxy-badge flex items-center gap-2 px-3 py-1 border rounded-full w-fit bg-${color}-500/10 border-${color}-500/20`;
+        }
+
+        function addLog(msg, color = 'text-slate-400') {
+            const div = document.createElement('div');
+            div.className = color;
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            document.getElementById('logContent').prepend(div);
+        }
+
+        function notifyUser(msg) {
+            if (Notification.permission === 'granted') new Notification('Agent Alert', { body: msg });
+        }
+
+        document.getElementById('enableNotifs').addEventListener('click', () => Notification.requestPermission());
+        document.getElementById('refreshBtn').addEventListener('click', fetchWithFallback);
+        
+
+        window.onload = () => {
+            fetchWithFallback();
+            setInterval(fetchWithFallback, 300000); // 5 min
+        };
+    </script>
+</body>
+</html>
+
+
