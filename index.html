@@ -74,13 +74,13 @@
         </div>
     </div>
 
-    <script>
+<script>
         const TICKER = 'SOXX';
+        // FIX 1: Added correct proxy paths
         const PROXIES = [
-            'https://api.allorigins.win',
+            'https://api.allorigins.win/raw?url=',
             'https://corsproxy.io/?',
             'https://proxy.corsfix.com/?'
-
         ];
 
         // Market Baseline (June 9, 2026 Open)
@@ -88,7 +88,8 @@
         let currentProxyIndex = 0;
 
         async function fetchMarketData() {
-            const baseUrl = `https://query1.finance.yahoo.com{TICKER}`;
+            // FIX 2: Correct Yahoo Finance endpoint and string interpolation
+            const baseUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${TICKER}`;
             
             for (let i = 0; i < PROXIES.length; i++) {
                 const proxy = PROXIES[currentProxyIndex];
@@ -100,7 +101,6 @@
                     const response = await fetch(fullUrl);
                     if (!response.ok) throw new Error();
                     
-
                     const data = await response.json();
                     
                     if (data?.quoteResponse?.result?.[0]) {
@@ -138,24 +138,36 @@
             const label = badge.querySelector('span:last-child');
             label.innerText = text;
             
-            const colorMap = {
+            // FIX 3: Explicit mappings for Tailwind CDN to pick up the classes
+            const dotColorMap = {
                 emerald: 'bg-emerald-500',
-
                 red: 'bg-red-500',
                 amber: 'bg-amber-500 animate-pulse'
             };
             
-            dot.className = `w-1.5 h-1.5 rounded-full ${colorMap[color]}`;
-            badge.className = `proxy-badge flex items-center gap-2 px-3 py-1 border rounded-full w-fit bg-${color}-500/10 border-${color}-500/20`;
+            const badgeColorMap = {
+                emerald: 'bg-emerald-500/10 border-emerald-500/20',
+                red: 'bg-red-500/10 border-red-500/20',
+                amber: 'bg-amber-500/10 border-amber-500/20'
+            };
+            
+            dot.className = `w-1.5 h-1.5 rounded-full ${dotColorMap[color]}`;
+            badge.className = `proxy-badge flex items-center gap-2 px-3 py-1 border rounded-full w-fit ${badgeColorMap[color]}`;
         }
 
-        document.getElementById('enableNotifs').addEventListener('click', () => Notification.requestPermission());
+        document.getElementById('enableNotifs').addEventListener('click', () => {
+            // Safety check in case browser doesn't support notifications
+            if ("Notification" in window) {
+                Notification.requestPermission();
+            }
+        });
         
         window.onload = () => {
             fetchMarketData();
             setInterval(fetchMarketData, 300000); // 5 Min
         };
     </script>
+    
 </body>
 </html>
 
