@@ -75,12 +75,11 @@
     </div>
 
 <script>
-        const TICKER = 'SOXX';
         // FIX 1: Added correct proxy paths
         const PROXIES = [
             'https://api.allorigins.win/raw?url=',
-            'https://corsproxy.io/?',
-            'https://proxy.corsfix.com/?'
+            'https://api.codetabs.com/v1/proxy?quest=',
+            'https://corsproxy.io/?'
         ];
 
         // Market Baseline (June 9, 2026 Open)
@@ -89,7 +88,7 @@
 
         async function fetchMarketData() {
             // FIX 2: Correct Yahoo Finance endpoint and string interpolation
-            const baseUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${TICKER}`;
+            const baseUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=SOXX`;
             
             for (let i = 0; i < PROXIES.length; i++) {
                 const proxy = PROXIES[currentProxyIndex];
